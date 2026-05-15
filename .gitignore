@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.vscode/
+.idea/
+
+*.csv~
+*.tmp
+
+.env
+
+# métricas generadas
+metricas_simulacion.csv
