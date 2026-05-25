@@ -1177,7 +1177,7 @@ def render(agentes, t):
 
 def simular():
 
-    agentes = cargar_agentes("People.csv")
+    agentes = cargar_agentes("people.csv")
 
     plt.figure(figsize=(12,8))
 
