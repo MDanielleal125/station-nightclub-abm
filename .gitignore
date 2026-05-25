@@ -11,5 +11,7 @@ __pycache__/
 
 .env
 
+/venv/
+
 # métricas generadas
 metricas_simulacion.csv
