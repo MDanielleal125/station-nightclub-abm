@@ -46,11 +46,19 @@ class MonteCarloRunner:
     and collects global metrics from each run.
     """
     
-    def __init__(self, scenario_num: int, num_simulations: int = 30):
+    def __init__(self, scenario_num: int, num_simulations: int = 100, bootstrap_samples: int = 1000):
         self.scenario_num = scenario_num
         self.num_simulations = num_simulations
+        self.bootstrap_samples = bootstrap_samples
         self.cfg = get_scenario(scenario_num)
         self.results = []
+        
+        # Generate filename suffix based on parameters
+        self.suffix = f"_s{scenario_num}"
+        if num_simulations != 100:
+            self.suffix += f"_n{num_simulations}"
+        if bootstrap_samples != 1000:
+            self.suffix += f"_bs{bootstrap_samples}"
         
     def run_single_simulation(self, seed: int) -> dict:
         """
@@ -368,8 +376,9 @@ class VisualizationGenerator:
     Generates statistical visualizations.
     """
     
-    def __init__(self, output_dir: str = "plots"):
+    def __init__(self, output_dir: str = "plots", suffix: str = ""):
         self.output_dir = output_dir
+        self.suffix = suffix
         os.makedirs(output_dir, exist_ok=True)
         
         # Set style
@@ -398,6 +407,10 @@ class VisualizationGenerator:
         ax.legend()
         
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
     
@@ -427,6 +440,10 @@ class VisualizationGenerator:
         
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
     
@@ -450,6 +467,10 @@ class VisualizationGenerator:
         ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
     
@@ -476,6 +497,10 @@ class VisualizationGenerator:
         ax.grid(True, alpha=0.3, axis='y')
         
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
     
@@ -495,6 +520,10 @@ class VisualizationGenerator:
         ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
 
@@ -508,10 +537,11 @@ class HeatmapAnalyzer:
     Generates occupancy heatmaps from simulation data.
     """
     
-    def __init__(self, world_width: int, world_height: int, output_dir: str = "heatmaps"):
+    def __init__(self, world_width: int, world_height: int, output_dir: str = "heatmaps", suffix: str = ""):
         self.width = world_width
         self.height = world_height
         self.output_dir = output_dir
+        self.suffix = suffix
         os.makedirs(output_dir, exist_ok=True)
     
     def accumulate_positions(self, all_position_histories: list) -> np.ndarray:
@@ -567,6 +597,10 @@ class HeatmapAnalyzer:
         ax.set_ylabel('Y Position', fontsize=12)
         
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
     
@@ -574,6 +608,10 @@ class HeatmapAnalyzer:
         """
         Export heatmap matrix as CSV.
         """
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         pd.DataFrame(heatmap).to_csv(os.path.join(self.output_dir, filename), 
                                       index=False, header=False)
 
@@ -587,8 +625,13 @@ class ReportGenerator:
     Generates a comprehensive markdown report.
     """
     
-    def __init__(self, output_file: str = "statistical_report.md"):
+    def __init__(self, output_file: str = "statistical_report.md", suffix: str = ""):
         self.output_file = output_file
+        self.suffix = suffix
+        # Add suffix to output file if provided
+        if suffix:
+            base, ext = os.path.splitext(output_file)
+            self.output_file = f"{base}{suffix}{ext}"
         self.sections = []
     
     def add_section(self, title: str, content: str):
@@ -666,7 +709,7 @@ def main():
     print("STEP 1: Running Monte Carlo Simulations")
     print("="*60)
     
-    runner = MonteCarloRunner(args.scenario, args.simulations)
+    runner = MonteCarloRunner(args.scenario, args.simulations, args.bootstrap)
     results = runner.run_all_simulations()
     
     if len(results) == 0:
@@ -687,8 +730,8 @@ def main():
         'total_simulation_time': r['total_simulation_time']
     } for r in results])
     
-    results_df.to_csv('montecarlo_results.csv', index=False)
-    print(f"Results exported to montecarlo_results.csv")
+    results_df.to_csv(f'montecarlo_results{runner.suffix}.csv', index=False)
+    print(f"Results exported to montecarlo_results{runner.suffix}.csv")
     
     # Step 2: Statistical analysis
     print("\n" + "="*60)
@@ -699,13 +742,13 @@ def main():
     
     # Sample statistics
     sample_stats = analyzer.calculate_sample_statistics()
-    sample_stats.to_csv('sample_statistics.csv')
-    print("Sample statistics exported to sample_statistics.csv")
+    sample_stats.to_csv(f'sample_statistics{runner.suffix}.csv')
+    print(f"Sample statistics exported to sample_statistics{runner.suffix}.csv")
     
     # Confidence intervals
     ci_results = analyzer.calculate_confidence_intervals()
-    ci_results.to_csv('confidence_intervals.csv')
-    print("Confidence intervals exported to confidence_intervals.csv")
+    ci_results.to_csv(f'confidence_intervals{runner.suffix}.csv')
+    print(f"Confidence intervals exported to confidence_intervals{runner.suffix}.csv")
     
     # Distribution fitting
     print("\nFitting distributions...")
@@ -732,8 +775,8 @@ def main():
     
     if dist_summary:
         dist_df = pd.DataFrame(dist_summary)
-        dist_df.to_csv('distribution_fits.csv', index=False)
-        print("Distribution fits exported to distribution_fits.csv")
+        dist_df.to_csv(f'distribution_fits{runner.suffix}.csv', index=False)
+        print(f"Distribution fits exported to distribution_fits{runner.suffix}.csv")
     
     # Bootstrapping
     print("\nPerforming bootstrap analysis...")
@@ -756,31 +799,31 @@ def main():
         })
     
     bs_df = pd.DataFrame(bs_summary)
-    bs_df.to_csv('bootstrap_results.csv', index=False)
-    print("Bootstrap results exported to bootstrap_results.csv")
+    bs_df.to_csv(f'bootstrap_results{runner.suffix}.csv', index=False)
+    print(f"Bootstrap results exported to bootstrap_results{runner.suffix}.csv")
     
     # Step 3: Visualization
     print("\n" + "="*60)
     print("STEP 3: Generating Visualizations")
     print("="*60)
     
-    viz = VisualizationGenerator()
+    viz = VisualizationGenerator(suffix=runner.suffix)
     
     # Histograms
     viz.plot_histogram(results_df['total_evacuated'].values, 
                        'Distribution of Evacuated Counts', 
                        'Evacuated Count', 'histogram_evacuated.png')
-    print("  Generated histogram_evacuated.png")
+    print(f"  Generated histogram_evacuated{runner.suffix}.png")
     
     viz.plot_histogram(results_df['total_dead'].values, 
                        'Distribution of Death Counts', 
                        'Death Count', 'histogram_deaths.png')
-    print("  Generated histogram_deaths.png")
+    print(f"  Generated histogram_deaths{runner.suffix}.png")
     
     viz.plot_histogram(results_df['average_escape_time'].values, 
                        'Distribution of Average Escape Times', 
                        'Average Escape Time (s)', 'histogram_escape_times.png')
-    print("  Generated histogram_escape_times.png")
+    print(f"  Generated histogram_escape_times{runner.suffix}.png")
     
     # Boxplots
     box_data = {
@@ -790,7 +833,7 @@ def main():
         'Trapped': results_df['total_trapped'].values
     }
     viz.plot_boxplot(box_data, 'Boxplot of Evacuation Metrics', 'boxplot_metrics.png')
-    print("  Generated boxplot_metrics.png")
+    print(f"  Generated boxplot_metrics{runner.suffix}.png")
     
     # Bootstrap distributions
     for metric, bs in bootstrap_results.items():
@@ -800,13 +843,13 @@ def main():
             f'Bootstrap Distribution - {metric.replace("_", " ").title()}',
             f'bootstrap_{metric}.png'
         )
-        print(f"  Generated bootstrap_{metric}.png")
+        print(f"  Generated bootstrap_{metric}{runner.suffix}.png")
     
     # Confidence intervals
     viz.plot_confidence_intervals(ci_results, 
                                   '95% Confidence Intervals', 
                                   'confidence_intervals.png')
-    print("  Generated confidence_intervals.png")
+    print(f"  Generated confidence_intervals{runner.suffix}.png")
     
     # Step 4: Heatmap analysis
     print("\n" + "="*60)
@@ -818,7 +861,7 @@ def main():
     if 'smoke_exposure' in first_result:
         height, width = first_result['smoke_exposure'].shape
         
-        heatmap_analyzer = HeatmapAnalyzer(width, height)
+        heatmap_analyzer = HeatmapAnalyzer(width, height, suffix=runner.suffix)
         
         # Accumulate data
         all_positions = [r['position_history'] for r in results]
@@ -831,7 +874,7 @@ def main():
                                       'Congestion Heatmap (Agent Positions)', 
                                       'heatmap_congestion.png')
         heatmap_analyzer.export_matrix(congestion_heatmap, 'congestion_matrix.csv')
-        print("  Generated congestion heatmap")
+        print(f"  Generated congestion heatmap{runner.suffix}")
         
         # Death heatmap
         death_heatmap = heatmap_analyzer.accumulate_deaths(all_deaths)
@@ -839,7 +882,7 @@ def main():
                                       'Death Heatmap', 
                                       'heatmap_death.png', cmap='Reds')
         heatmap_analyzer.export_matrix(death_heatmap, 'death_matrix.csv')
-        print("  Generated death heatmap")
+        print(f"  Generated death heatmap{runner.suffix}")
         
         # Smoke exposure heatmap
         smoke_heatmap = heatmap_analyzer.accumulate_smoke(all_smoke)
@@ -847,14 +890,14 @@ def main():
                                       'Smoke Exposure Heatmap', 
                                       'heatmap_smoke.png', cmap='Greys')
         heatmap_analyzer.export_matrix(smoke_heatmap, 'smoke_matrix.csv')
-        print("  Generated smoke exposure heatmap")
+        print(f"  Generated smoke exposure heatmap{runner.suffix}")
     
     # Step 5: Generate report
     print("\n" + "="*60)
     print("STEP 5: Generating Markdown Report")
     print("="*60)
     
-    report = ReportGenerator()
+    report = ReportGenerator(suffix=runner.suffix)
     
     report.add_section("Monte Carlo Methodology", 
                        f"This analysis performed {args.simulations} Monte Carlo simulations "
@@ -898,10 +941,10 @@ def main():
     print("MONTE CARLO ANALYSIS COMPLETE")
     print("="*60)
     print(f"Successful simulations: {len(results)}/{args.simulations}")
-    print(f"Results exported to: montecarlo_results.csv")
+    print(f"Results exported to: montecarlo_results{runner.suffix}.csv")
     print(f"Plots saved to: plots/")
     print(f"Heatmaps saved to: heatmaps/")
-    print(f"Report generated: statistical_report.md")
+    print(f"Report generated: statistical_report{runner.suffix}.md")
     print("="*60 + "\n")
 
 

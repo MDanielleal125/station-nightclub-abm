@@ -98,6 +98,11 @@ class ConvergenceAnalyzer:
             'deaths': [],
             'trapped': []
         }
+        
+        # Generate filename suffix based on parameters
+        self.suffix = f"_s{scenario_num}"
+        if pilot_simulations != DEFAULT_PILOT_SIMULATIONS:
+            self.suffix += f"_p{pilot_simulations}"
     
     def run_single_simulation(self, seed: int) -> dict:
         """
@@ -400,8 +405,9 @@ class ConvergenceVisualizer:
     Generates convergence plots showing statistical stabilization.
     """
     
-    def __init__(self, output_dir: str = "plots"):
+    def __init__(self, output_dir: str = "plots", suffix: str = ""):
         self.output_dir = output_dir
+        self.suffix = suffix
         os.makedirs(output_dir, exist_ok=True)
         
         plt.rcParams['figure.figsize'] = (12, 6)
@@ -440,6 +446,10 @@ class ConvergenceVisualizer:
                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
     
@@ -466,6 +476,10 @@ class ConvergenceVisualizer:
         ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
     
@@ -487,6 +501,10 @@ class ConvergenceVisualizer:
         ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
+        # Add suffix to filename if provided
+        if self.suffix:
+            base, ext = os.path.splitext(filename)
+            filename = f"{base}{self.suffix}{ext}"
         plt.savefig(os.path.join(self.output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close()
 
@@ -500,8 +518,13 @@ class ConvergenceReportGenerator:
     Generates markdown report section for convergence analysis.
     """
     
-    def __init__(self, output_file: str = "statistical_report.md"):
+    def __init__(self, output_file: str = "statistical_report.md", suffix: str = ""):
         self.output_file = output_file
+        self.suffix = suffix
+        # Add suffix to output file if provided
+        if suffix:
+            base, ext = os.path.splitext(output_file)
+            self.output_file = f"{base}{suffix}{ext}"
     
     def append_convergence_section(self, analysis_results: dict, scenario_num: int):
         """
@@ -612,7 +635,7 @@ def main():
     
     # Generate visualizations
     print("\nGenerating convergence plots...")
-    viz = ConvergenceVisualizer()
+    viz = ConvergenceVisualizer(suffix=analyzer.suffix)
     
     viz.plot_convergence(
         results['cumulative_means'], 
@@ -621,7 +644,7 @@ def main():
         'convergence_evacuated.png',
         target_value=results['final_mean_evacuated']
     )
-    print("  Generated convergence_evacuated.png")
+    print(f"  Generated convergence_evacuated{analyzer.suffix}.png")
     
     viz.plot_convergence(
         results['cumulative_means'], 
@@ -630,7 +653,7 @@ def main():
         'convergence_deaths.png',
         target_value=results['final_mean_deaths']
     )
-    print("  Generated convergence_deaths.png")
+    print(f"  Generated convergence_deaths{analyzer.suffix}.png")
     
     viz.plot_convergence(
         results['cumulative_means'], 
@@ -639,7 +662,7 @@ def main():
         'convergence_trapped.png',
         target_value=results['final_mean_trapped']
     )
-    print("  Generated convergence_trapped.png")
+    print(f"  Generated convergence_trapped{analyzer.suffix}.png")
     
     viz.plot_relative_error(
         results['relative_errors'],
@@ -647,18 +670,18 @@ def main():
         'convergence_relative_error.png',
         threshold=AUTO_STOP_RELATIVE_ERROR
     )
-    print("  Generated convergence_relative_error.png")
+    print(f"  Generated convergence_relative_error{analyzer.suffix}.png")
     
     viz.plot_std_convergence(
         results['cumulative_stds'],
         'Standard Deviation Convergence',
         'convergence_std.png'
     )
-    print("  Generated convergence_std.png")
+    print(f"  Generated convergence_std{analyzer.suffix}.png")
     
     # Generate report section
     print("\nGenerating convergence report section...")
-    report_gen = ConvergenceReportGenerator()
+    report_gen = ConvergenceReportGenerator(suffix=analyzer.suffix)
     report_gen.append_convergence_section(results, args.scenario)
     
     # Export convergence data
@@ -675,16 +698,16 @@ def main():
         'rel_error_trapped': results['relative_errors']['trapped']
     })
     
-    convergence_df.to_csv('convergence_data.csv', index=False)
-    print("Convergence data exported to convergence_data.csv")
+    convergence_df.to_csv(f'convergence_data{analyzer.suffix}.csv', index=False)
+    print(f"Convergence data exported to convergence_data{analyzer.suffix}.csv")
     
     print("\n" + "="*60)
     print("CONVERGENCE ANALYSIS COMPLETE")
     print("="*60)
     print(f"Recommended simulations for future runs: {results['total_simulations']}")
     print(f"Convergence plots saved to: plots/")
-    print(f"Convergence data exported to: convergence_data.csv")
-    print(f"Report section added to: statistical_report.md")
+    print(f"Convergence data exported to: convergence_data{analyzer.suffix}.csv")
+    print(f"Report section added to: statistical_report{analyzer.suffix}.md")
     print("="*60 + "\n")
 
 

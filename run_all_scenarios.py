@@ -85,7 +85,7 @@ def organize_scenario_results(scenario_num: int):
 
 
 def run_scenario_analysis(scenario_num: int, run_convergence: bool, run_montecarlo: bool,
-                          pilot_sims: int, mc_sims: int):
+                          pilot_sims: int, mc_sims: int, bootstrap_sims: int):
     """
     Run both analyses for a single scenario.
     """
@@ -106,7 +106,7 @@ def run_scenario_analysis(scenario_num: int, run_convergence: bool, run_montecar
     
     # Run Monte Carlo analysis
     if run_montecarlo:
-        cmd = f"python montecarlo_analysis.py --scenario {scenario_num} --simulations {mc_sims}"
+        cmd = f"python montecarlo_analysis.py --scenario {scenario_num} --simulations {mc_sims} --bootstrap {bootstrap_sims}"
         success = run_command(cmd, f"Monte Carlo Analysis - Scenario {scenario_num}")
         if not success:
             print(f"WARNING: Monte Carlo analysis failed for scenario {scenario_num}")
@@ -172,6 +172,8 @@ def main():
                        help="Number of pilot simulations for convergence")
     parser.add_argument("--simulations", type=int, default=50,
                        help="Number of Monte Carlo simulations per scenario")
+    parser.add_argument("--bootstrap", type=int, default=1000,
+                       help="Number of bootstrap samples for Monte Carlo analysis")
     
     args = parser.parse_args()
     
@@ -186,6 +188,7 @@ def main():
     print(f"Run Monte Carlo: {not args.skip_montecarlo}")
     print(f"Pilot simulations: {args.pilot}")
     print(f"Monte Carlo simulations: {args.simulations}")
+    print(f"Bootstrap samples: {args.bootstrap}")
     print(f"{'='*60}\n")
     
     if args.skip_convergence and args.skip_montecarlo:
@@ -201,7 +204,8 @@ def main():
             run_convergence=not args.skip_convergence,
             run_montecarlo=not args.skip_montecarlo,
             pilot_sims=args.pilot,
-            mc_sims=args.simulations
+            mc_sims=args.simulations,
+            bootstrap_sims=args.bootstrap
         )
     
     end_time = datetime.now()

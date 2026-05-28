@@ -463,6 +463,19 @@ python montecarlo_analysis.py --scenario 1 --simulations 50
 python montecarlo_analysis.py --scenario 1 --simulations 100 --bootstrap 2000
 ```
 
+**Nomenclatura de Archivos Generados:**
+
+Los archivos generados incluyen un sufijo que identifica el escenario, número de simulaciones y muestras de bootstrap:
+
+- `_s{N}` - Número de escenario (siempre incluido)
+- `_n{N}` - Número de simulaciones (si no es 100)
+- `_bs{N}` - Muestras bootstrap (si no es 1000)
+
+Ejemplos:
+- `montecarlo_results_s1.csv` - Escenario 1, 100 simulaciones, 1000 bootstrap
+- `montecarlo_results_s2_n50.csv` - Escenario 2, 50 simulaciones, 1000 bootstrap
+- `montecarlo_results_s3_n100_bs2000.csv` - Escenario 3, 100 simulaciones, 2000 bootstrap
+
 ### Ejecutar Análisis de Convergencia
 
 ```bash
@@ -478,6 +491,17 @@ python simulation_convergence.py --scenario 1 --error-deaths 3
 # Sin criterio de parada automática
 python simulation_convergence.py --scenario 1 --no-auto-stop
 ```
+
+**Nomenclatura de Archivos de Convergencia:**
+
+Los archivos de convergencia también incluyen sufijo de escenario:
+
+- `_s{N}` - Número de escenario (siempre incluido)
+- `_p{N}` - Simulaciones piloto (si no es 10)
+
+Ejemplos:
+- `convergence_data_s1.csv` - Escenario 1, 10 pilotos
+- `convergence_data_s2_p20.csv` - Escenario 2, 20 pilotos
 
 ### Flujo de Trabajo Recomendado
 
