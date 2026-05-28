@@ -1,0 +1,4 @@
+metric,original_mean,bootstrap_mean,bootstrap_std,bootstrap_ci_lower,bootstrap_ci_upper
+total_evacuated,186.0,186.0,0.0,186.0,186.0
+total_dead,104.0,104.0,0.0,104.0,104.0
+total_trapped,175.0,175.0,0.0,175.0,175.0

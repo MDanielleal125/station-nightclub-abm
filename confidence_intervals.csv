@@ -1,0 +1,6 @@
+,mean,std,margin_of_error,ci_lower,ci_upper,confidence_level
+total_evacuated,186.0,,,,,0.95
+total_dead,104.0,,,,,0.95
+total_injured,135.0,,,,,0.95
+total_trapped,175.0,,,,,0.95
+average_escape_time,169.81720430107526,,,,,0.95

@@ -1,0 +1,2 @@
+simulation_id,total_evacuated,total_dead,total_injured,total_trapped,average_escape_time,max_density,average_smoke,window_escape_count,total_simulation_time
+1,186,104,135,175,169.81720430107526,4.131182795698924,923.7427881931886,0,300

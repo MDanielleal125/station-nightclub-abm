@@ -6,12 +6,12 @@ __pycache__/
 .vscode/
 .idea/
 
-*.csv~
+
 *.tmp
 
 .env
 
+/venvm/
 /venv/
-
 # métricas generadas
 metricas_simulacion.csv
