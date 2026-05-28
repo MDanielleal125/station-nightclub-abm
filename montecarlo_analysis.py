@@ -35,178 +35,156 @@ from simulation.smoke import SmokeSimulation
 from simulation.movement import mover, build_step_arrays
 from metrics.collector import MetricsCollector
 
+import copy
+from joblib import Parallel, delayed
+
 
 # =========================================================
 # MONTE CARLO SIMULATION RUNNER
 # =========================================================
 
 class MonteCarloRunner:
-    """
-    Runs multiple simulation iterations with different random seeds
-    and collects global metrics from each run.
-    """
-    
     def __init__(self, scenario_num: int, num_simulations: int = 30):
         self.scenario_num = scenario_num
         self.num_simulations = num_simulations
         self.cfg = get_scenario(scenario_num)
         self.results = []
-        
+
+        # Load all CSVs once — shared as read-only templates.
+        # Each simulation deepcopies these instead of hitting disk.
+        print(f"Loading data for scenario {scenario_num}...")
+
+        self._world_template = cargar_layout(
+            os.path.join("data", "building_nightclub.csv"))
+        self._world_template.calcular_interior()
+        self._world_template.aplicar_blocked_exits(self.cfg["blocked_exits"])
+        self._world_template.calcular_distance_maps()
+
+        self._fire_template = FireSimulation()
+        self._fire_template.cargar_eventos(
+            os.path.join("data", "fire_nightclub_merged.csv"),
+            self._world_template)
+
+        self._smoke_template = SmokeSimulation()
+        self._smoke_template.cargar_eventos(
+            os.path.join("data", "smoke.csv"),
+            self._world_template)
+
+        self._agentes_template = cargar_agentes(
+            os.path.join("data", "people.csv"),
+            self._world_template, self.cfg)
+
+        print("Data loaded. Ready to run simulations.")
+
     def run_single_simulation(self, seed: int) -> dict:
-        """
-        Run a single simulation with the given random seed.
-        Returns a dictionary of global metrics.
-        """
-        # Set random seed for reproducibility
         random.seed(seed)
         np.random.seed(seed)
-        
-        # Load world
-        world = cargar_layout(os.path.join("data", "building_nightclub.csv"))
-        world.calcular_interior()
-        world.aplicar_blocked_exits(self.cfg["blocked_exits"])
-        
-        # Load fire and smoke
-        fire_sim = FireSimulation()
-        fire_sim.cargar_eventos(os.path.join("data", "fire_nightclub_merged.csv"), world)
-        
-        smoke_sim = SmokeSimulation()
-        smoke_sim.cargar_eventos(os.path.join("data", "smoke.csv"), world)
-        
-        # Calculate distance maps
-        world.calcular_distance_maps()
-        
-        # Load agents
-        agentes = cargar_agentes(os.path.join("data", "people.csv"), world, self.cfg)
-        
-        # Initialize metrics collector
+
+        # Deepcopy mutable state — no disk reads
+        world     = copy.deepcopy(self._world_template)
+        fire_sim  = copy.deepcopy(self._fire_template)
+        smoke_sim = copy.deepcopy(self._smoke_template)
+        agentes   = copy.deepcopy(self._agentes_template)
+
         metrics = MetricsCollector()
-        
-        # Track escape times
         escape_times = []
         window_escapes = 0
-        
-        # Track positions for heatmap
         position_history = []
         death_positions = []
         smoke_exposure = np.zeros((world.height, world.width), dtype=np.float32)
-        
-        # Main simulation loop
+
         steps = self.cfg["simulation_steps"]
-        
+
         for t in range(steps):
-            # Update fire
             fire_sim.actualizar(world, t)
             fire_sim.expandir(world, t, self.cfg)
-            
-            # Update smoke
-            smoke_sim.actualizar(world, t, self.cfg)
-            
-            # Track smoke exposure
-            smoke_exposure += world.smoke
-            
-            # Move agents
 
+            smoke_sim.actualizar(world, t, self.cfg)
+
+            smoke_exposure += world.smoke
+
+            # Build step arrays once per step, update as agents move
             occupancy, fire_score = build_step_arrays(agentes, world)
 
             for a in agentes:
                 if not a.alive:
                     continue
-                
-                # Store position for heatmap
-                if a.alive:
-                    position_history.append((a.x, a.y))
 
-                old_x, old_y = a.x, a.y  # save before move
-                
+                position_history.append((a.x, a.y))
+
+                old_x, old_y = a.x, a.y
+
                 mover(a, agentes, world, t, occupancy, fire_score)
 
-                # Keep occupancy live as agents move
                 if (a.x, a.y) != (old_x, old_y):
                     occupancy[old_y][old_x] -= 1
-                    occupancy[a.y][a.x] += 1
-                
-                # Smoke effects
+                    occupancy[a.y][a.x]     += 1
+
                 densidad = world.smoke[a.y][a.x]
                 a.smoke_inhaled += densidad * 0.22
-                a.energy -= densidad * 0.05
-                
-                # Injury
+                a.energy        -= densidad * 0.05
+
                 if a.smoke_inhaled > 120 or a.energy < 45:
                     a.injured = True
-                
-                # Death by fire
+
                 if world.grid[a.y][a.x] == FIRE:
                     a.alive = False
                     death_positions.append((a.x, a.y))
-                
-                # Evacuation
+
                 elif world.grid[a.y][a.x] == EXIT:
                     a.evacuated = True
                     a.alive = False
                     escape_times.append(t)
-                
-                # Death by smoke
+
                 elif a.energy <= 0 or a.smoke_inhaled > 260:
                     a.alive = False
                     death_positions.append((a.x, a.y))
-            
-            # Record metrics
+
             metrics.record(t, agentes, world, occupancy)
-        
-        # Calculate final global metrics
+
         total_evacuated = sum(a.evacuated for a in agentes)
-        total_dead = sum((not a.alive) and (not a.evacuated) for a in agentes)
-        total_injured = sum(a.injured for a in agentes)
-        total_trapped = sum(a.alive for a in agentes)
-        
+        total_dead      = sum((not a.alive) and (not a.evacuated) for a in agentes)
+        total_injured   = sum(a.injured for a in agentes)
+        total_trapped   = sum(a.alive for a in agentes)
+
         avg_escape_time = np.mean(escape_times) if escape_times else 0
-        max_density = max(metrics.avg_density) if metrics.avg_density else 0
-        avg_smoke = np.mean(metrics.avg_smoke) if metrics.avg_smoke else 0
-        
+        max_density     = max(metrics.avg_density) if metrics.avg_density else 0
+        avg_smoke       = np.mean(metrics.avg_smoke) if metrics.avg_smoke else 0
+
         return {
-            'simulation_id': seed,
-            'total_evacuated': total_evacuated,
-            'total_dead': total_dead,
-            'total_injured': total_injured,
-            'total_trapped': total_trapped,
-            'average_escape_time': avg_escape_time,
-            'max_density': max_density,
-            'average_smoke': avg_smoke,
-            'window_escape_count': window_escapes,
+            'simulation_id':        seed,
+            'total_evacuated':      total_evacuated,
+            'total_dead':           total_dead,
+            'total_injured':        total_injured,
+            'total_trapped':        total_trapped,
+            'average_escape_time':  avg_escape_time,
+            'max_density':          max_density,
+            'average_smoke':        avg_smoke,
+            'window_escape_count':  window_escapes,
             'total_simulation_time': steps,
-            'position_history': position_history,
-            'death_positions': death_positions,
-            'smoke_exposure': smoke_exposure,
-            'escape_times': escape_times
+            'position_history':     position_history,
+            'death_positions':      death_positions,
+            'smoke_exposure':       smoke_exposure,
+            'escape_times':         escape_times
         }
-    
+
     def run_all_simulations(self):
-        """
-        Run all Monte Carlo simulations.
-        """
         print(f"\n{'='*60}")
         print(f"MONTE CARLO ANALYSIS - Scenario {self.scenario_num}")
         print(f"{'='*60}")
         print(f"Number of simulations: {self.num_simulations}")
         print(f"Configuration: {self.cfg['name']}")
         print(f"{'='*60}\n")
-        
-        for i in range(self.num_simulations):
-            seed = i + 1
-            print(f"Running simulation {i+1}/{self.num_simulations} (seed={seed})...", end=' ')
-            
-            try:
-                result = self.run_single_simulation(seed)
-                self.results.append(result)
-                print("✓")
-            except Exception as e:
-                print(f"✗ Error: {e}")
-                continue
-        
+
+        seeds = list(range(1, self.num_simulations + 1))
+
+        results = Parallel(n_jobs=-1, verbose=10)(
+            delayed(self.run_single_simulation)(seed) for seed in seeds
+        )
+
+        self.results = [r for r in results if r is not None]
         print(f"\nCompleted {len(self.results)}/{self.num_simulations} simulations")
         return self.results
-
 
 # =========================================================
 # STATISTICAL ANALYSIS MODULES
