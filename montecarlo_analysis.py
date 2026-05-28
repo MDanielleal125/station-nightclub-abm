@@ -46,7 +46,7 @@ class MonteCarloRunner:
     and collects global metrics from each run.
     """
     
-    def __init__(self, scenario_num: int, num_simulations: int = 100):
+    def __init__(self, scenario_num: int, num_simulations: int = 30):
         self.scenario_num = scenario_num
         self.num_simulations = num_simulations
         self.cfg = get_scenario(scenario_num)
