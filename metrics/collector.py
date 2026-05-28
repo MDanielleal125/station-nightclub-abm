@@ -21,7 +21,7 @@ class MetricsCollector:
 
     # ----------------------------------------------------------
 
-    def record(self, t: int, agentes: list, world):
+    def record(self, t: int, agentes: list, world, occupancy: np.ndarray):
         """Guarda una fila de métricas para el segundo t."""
         evacuados = sum(a.evacuated for a in agentes)
         muertos = sum((not a.alive) and (not a.evacuated) for a in agentes)
@@ -37,7 +37,7 @@ class MetricsCollector:
 
         if vivos > 0:
             total_density = sum(
-                calcular_densidad_local(a.x, a.y, agentes)
+                calcular_densidad_local(a.x, a.y, occupancy, world)
                 for a in agentes if a.alive
             )
             self.avg_density.append(total_density / vivos)

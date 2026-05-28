@@ -1,6 +1,6 @@
 import numpy as np
 from collections import defaultdict
-
+from scipy.ndimage import convolve
 from config.constants import WALL, FIRE
 
 
@@ -28,7 +28,6 @@ class SmokeSimulation:
                 density = float(row[3])
                 if 0 <= x < world.width and 0 <= y < world.height:
                     self.smoke_events[t].append((x, y, density))
-
         print(f"Smoke events cargados: {len(self.smoke_events)} pasos")
 
     # ----------------------------------------------------------
@@ -52,44 +51,52 @@ class SmokeSimulation:
                     )
 
         # --- Difusión ---
-        nuevo = world.smoke.copy()
 
-        for y in range(world.height):
-            for x in range(world.width):
-                if world.grid[y][x] == WALL:
-                    continue
+        wall_mask = (world.grid == WALL)
 
-                total = world.smoke[y][x]
-                count = 1
+        # Walls contribute 0 to both sum and count
+        smoke_no_wall = np.where(wall_mask, 0.0, world.smoke)
+        passable      = (~wall_mask).astype(np.float64)
 
-                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < world.width and 0 <= ny < world.height:
-                        if world.grid[ny][nx] != WALL:
-                            total += world.smoke[ny][nx]
-                            count += 1
+        kernel = np.array([[0, 1, 0],
+                           [1, 1, 1],
+                           [0, 1, 0]], dtype=np.float64)
 
-                nuevo[y][x] = max(
-                    nuevo[y][x],
-                    total / count * decay
-                )
+        smoke_sum = convolve(smoke_no_wall, kernel, mode='constant', cval=0.0)
+        count_sum = convolve(passable,      kernel, mode='constant', cval=0.0)
+        count_sum = np.maximum(count_sum, 1.0)  # avoid div/0 on isolated cells
 
-        world.smoke[:] = nuevo
+        averaged = smoke_sum / count_sum * decay
+
+        world.smoke = np.where(wall_mask, world.smoke, np.maximum(world.smoke, averaged))
 
         # --- Humo desde el fuego ---
+
         fire_cells = np.argwhere(world.grid == FIRE)
 
-        for fy, fx in fire_cells:
-            world.smoke[fy][fx] += 10
+        if len(fire_cells) > 0:
+            # Vectorized self-increment for all fire cells at once
+            world.smoke[fire_cells[:, 0], fire_cells[:, 1]] += 10
 
-            for dx in range(-3, 4):
-                for dy in range(-3, 4):
-                    nx, ny = fx + dx, fy + dy
-                    if not (0 <= nx < world.width and 0 <= ny < world.height):
-                        continue
-                    if world.grid[ny][nx] == WALL:
-                        continue
-                    dist = np.sqrt(dx * dx + dy * dy)
-                    if dist == 0:
-                        continue
-                    world.smoke[ny][nx] += max(0, 4.0 - dist)
+            # Precompute the 7×7 contribution kernel once (matches original formula)
+            r = 3
+            size = 2 * r + 1  # 7
+            ys, xs = np.ogrid[-r:r+1, -r:r+1]
+            dist_kernel = np.sqrt(xs**2 + ys**2)
+            contrib_kernel = np.maximum(0.0, 4.0 - dist_kernel)
+            contrib_kernel[r, r] = 0.0  # original skips dist==0
+
+            for fy, fx in fire_cells:
+                # Compute the valid slice bounds (handles edges of the grid)
+                y0 = max(0, fy - r);  y1 = min(world.height, fy + r + 1)
+                x0 = max(0, fx - r);  x1 = min(world.width,  fx + r + 1)
+
+                # Corresponding slice of the kernel
+                ky0 = y0 - (fy - r);  ky1 = ky0 + (y1 - y0)
+                kx0 = x0 - (fx - r);  kx1 = kx0 + (x1 - x0)
+
+                kernel_slice = contrib_kernel[ky0:ky1, kx0:kx1]
+
+                # Apply only to non-wall cells (original: `if world.grid[ny][nx] == WALL: continue`)
+                non_wall = (world.grid[y0:y1, x0:x1] != WALL)
+                world.smoke[y0:y1, x0:x1] += kernel_slice * non_wall

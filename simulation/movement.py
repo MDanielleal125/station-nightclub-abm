@@ -1,27 +1,54 @@
 import random
 import numpy as np
 from collections import defaultdict
+from scipy.ndimage import convolve as ndconvolve
 
 from config.constants import WALL, FIRE
+
+def build_step_arrays(agentes: list, world):
+    """
+    Builds the two per-step precomputed arrays.  Call once per
+    simulation step, before the agent loop.
+    """
+    # --- occupancy ---
+    occupancy = np.zeros((world.height, world.width), dtype=np.int16)
+    for a in agentes:
+        if a.alive:
+            occupancy[a.y][a.x] += 1
+
+    # --- fire_score ---
+
+    
+    fire_grid = (world.grid == FIRE).astype(np.float32)
+    kernel_5x5 = np.ones((5, 5), dtype=np.float32)
+    fire_score = ndconvolve(fire_grid, kernel_5x5, mode='constant', cval=0)
+
+    return occupancy, fire_score
 
 
 # =========================================================
 # DENSIDAD LOCAL
 # =========================================================
 
-def calcular_densidad_local(x: int, y: int, agentes: list) -> int:
-    """Cuenta agentes vivos en radio Manhattan ≤ 1."""
-    return sum(
-        1 for a in agentes
-        if a.alive and abs(a.x - x) + abs(a.y - y) <= 1
-    )
+def calcular_densidad_local(x: int, y: int, occupancy: np.ndarray, world) -> int:
+    """Cuenta agentes vivos en radio Manhattan <= 1."""
+    total = int(occupancy[y][x])
+    if y > 0:
+        total += int(occupancy[y - 1][x])
+    if y < world.height - 1:
+        total += int(occupancy[y + 1][x])
+    if x > 0:
+        total += int(occupancy[y][x - 1])
+    if x < world.width - 1:
+        total += int(occupancy[y][x + 1])
+    return total
 
 
 # =========================================================
 # ELEGIR MEJOR SALIDA
 # =========================================================
 
-def elegir_mejor_salida(agente, world):
+def elegir_mejor_salida(agente, world, fire_score: np.ndarray):
     """
     Evalúa cada salida conocida por el agente con un score
     que combina distancia, humo y fuego cercano.
@@ -39,13 +66,7 @@ def elegir_mejor_salida(agente, world):
         score = d
         score += world.smoke[ey][ex] * 10
 
-        # Penalizar si hay fuego cerca de la salida
-        for dx in range(-2, 3):
-            for dy in range(-2, 3):
-                fx, fy = ex + dx, ey + dy
-                if 0 <= fx < world.width and 0 <= fy < world.height:
-                    if world.grid[fy][fx] == FIRE:
-                        score += 250
+        score += fire_score[ey][ex] * 250
 
         if score < mejor_score:
             mejor_score = score
@@ -88,15 +109,10 @@ def actualizar_comportamiento_social(agente, agentes: list):
 # MOVIMIENTO PRINCIPAL
 # =========================================================
 
-def mover(agente, agentes: list, world, t: int):
+def mover(agente, agentes: list, world, t: int,
+          occupancy: np.ndarray, fire_score: np.ndarray):
     """
-    Ejecuta un paso de movimiento para el agente:
-    1. Verifica tiempo de reacción
-    2. Actualiza comportamiento social
-    3. Calcula pánico
-    4. Ajusta velocidad por humo / lesiones
-    5. Evalúa crowd crush
-    6. Elige la mejor celda adyacente hacia la salida
+    Executes one movement step for the agent.
     """
     if t < agente.reaction_time:
         return
@@ -112,12 +128,7 @@ def mover(agente, agentes: list, world, t: int):
     if humo_actual > 50:
         agente.panic += 2
 
-    for dx in range(-2, 3):
-        for dy in range(-2, 3):
-            nx, ny = agente.x + dx, agente.y + dy
-            if 0 <= nx < world.width and 0 <= ny < world.height:
-                if world.grid[ny][nx] == FIRE:
-                    agente.panic += 3
+    agente.panic += int(fire_score[agente.y][agente.x] * 3)
 
     # --- Velocidad de movimiento ---
     move_prob = agente.base_speed
@@ -144,7 +155,7 @@ def mover(agente, agentes: list, world, t: int):
         return
 
     # --- Crowd crush ---
-    densidad = calcular_densidad_local(agente.x, agente.y, agentes)
+    densidad = calcular_densidad_local(agente.x, agente.y, occupancy, world)
 
     if densidad >= 7:
         agente.energy -= 0.5
@@ -158,7 +169,7 @@ def mover(agente, agentes: list, world, t: int):
             return
 
     # --- Actualizar salida objetivo ---
-    nueva = elegir_mejor_salida(agente, world)
+    nueva = elegir_mejor_salida(agente, world, fire_score)
     if nueva is not None:
         agente.target_exit = nueva
 
@@ -180,9 +191,7 @@ def mover(agente, agentes: list, world, t: int):
             continue
         if world.grid[ny][nx] == FIRE:
             continue
-
-        # Evitar colisiones
-        if any(a.alive and a != agente and a.x == nx and a.y == ny for a in agentes):
+        if occupancy[ny][nx] > 0:
             continue
 
         score = distmap[ny][nx]
@@ -190,17 +199,10 @@ def mover(agente, agentes: list, world, t: int):
         score += random.uniform(0, 4)
 
         if (dx, dy) == agente.last_direction:
-            score -= 2  # momentum: premiar continuar en misma dirección
+            score -= 2
+        score += fire_score[ny][nx] * 90
 
-        # Penalizar celdas cerca del fuego
-        for dx2 in range(-2, 3):
-            for dy2 in range(-2, 3):
-                fx, fy = nx + dx2, ny + dy2
-                if 0 <= fx < world.width and 0 <= fy < world.height:
-                    if world.grid[fy][fx] == FIRE:
-                        score += 90
-
-        score += calcular_densidad_local(nx, ny, agentes) * 7
+        score += calcular_densidad_local(nx, ny, occupancy, world) * 7
 
         if score < best_score:
             best_score = score

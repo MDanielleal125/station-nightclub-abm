@@ -32,7 +32,7 @@ from config.constants import EXIT, FIRE
 from data_io.loaders import cargar_layout, cargar_agentes
 from simulation.fire import FireSimulation
 from simulation.smoke import SmokeSimulation
-from simulation.movement import mover
+from simulation.movement import mover, build_step_arrays
 from metrics.collector import MetricsCollector
 
 
@@ -106,6 +106,9 @@ class MonteCarloRunner:
             smoke_exposure += world.smoke
             
             # Move agents
+
+            occupancy, fire_score = build_step_arrays(agentes, world)
+
             for a in agentes:
                 if not a.alive:
                     continue
@@ -113,8 +116,15 @@ class MonteCarloRunner:
                 # Store position for heatmap
                 if a.alive:
                     position_history.append((a.x, a.y))
+
+                old_x, old_y = a.x, a.y  # save before move
                 
-                mover(a, agentes, world, t)
+                mover(a, agentes, world, t, occupancy, fire_score)
+
+                # Keep occupancy live as agents move
+                if (a.x, a.y) != (old_x, old_y):
+                    occupancy[old_y][old_x] -= 1
+                    occupancy[a.y][a.x] += 1
                 
                 # Smoke effects
                 densidad = world.smoke[a.y][a.x]
@@ -142,7 +152,7 @@ class MonteCarloRunner:
                     death_positions.append((a.x, a.y))
             
             # Record metrics
-            metrics.record(t, agentes, world)
+            metrics.record(t, agentes, world, occupancy)
         
         # Calculate final global metrics
         total_evacuated = sum(a.evacuated for a in agentes)

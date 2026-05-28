@@ -15,7 +15,7 @@ from config.constants import EXIT, FIRE
 from data_io.loaders import cargar_layout, cargar_agentes
 from simulation.fire import FireSimulation
 from simulation.smoke import SmokeSimulation
-from simulation.movement import mover
+from simulation.movement import mover, build_step_arrays
 from metrics.collector import MetricsCollector
 from visualization.renderer import Renderer
 
@@ -94,11 +94,18 @@ def main():
         smoke_sim.actualizar(world, t, cfg)
 
         # Agentes
+
+        occupancy, fire_score = build_step_arrays(agentes, world)
+
         for a in agentes:
             if not a.alive:
                 continue
 
-            mover(a, agentes, world, t)
+            old_x, old_y = a.x, a.y 
+            mover(a, agentes, world, t, occupancy, fire_score)
+            if (a.x, a.y) != (old_x, old_y):
+                occupancy[old_y][old_x] -= 1
+                occupancy[a.y][a.x] += 1
 
             # Efectos del humo en el agente
             densidad = world.smoke[a.y][a.x]
@@ -123,7 +130,7 @@ def main():
                 a.alive = False
 
         # Métricas y render
-        metrics.record(t, agentes, world)
+        metrics.record(t, agentes, world, occupancy)
 
         if renderer:
             renderer.render(agentes, t)
